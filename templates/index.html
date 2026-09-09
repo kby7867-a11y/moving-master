@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>무빙의 고수</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #121212;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            color: #ffffff;
+            font-family: 'Segoe UI', sans-serif;
+            user-select: none;
+        }
+        h1 { margin-bottom: 6px; font-size: 26px; }
+        .info { margin-top: 0; margin-bottom: 12px; color: #aaa; font-size: 13px; }
+        .canvas-container {
+            position: relative;
+            width: 500px;
+            height: 500px;
+        }
+        canvas {
+            border: 2px solid #00E676;
+            background-color: #0d1117;
+            box-shadow: 0 0 25px rgba(0, 230, 118, 0.2);
+            display: block;
+        }
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 500px;
+            height: 500px;
+            background: rgba(10, 10, 12, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(4px);
+        }
+        .overlay h2 {
+            font-size: 34px;
+            margin: 0 0 10px 0;
+            color: #00E676;
+        }
+        .overlay p {
+            color: #bbb;
+            margin: 5px 0 24px 0;
+            font-size: 15px;
+            text-align: center;
+        }
+        .btn {
+            background-color: #00E676;
+            color: #000;
+            border: none;
+            padding: 12px 32px;
+            font-size: 17px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: transform 0.1s, background-color 0.2s;
+        }
+        .btn:hover {
+            background-color: #00c853;
+            transform: scale(1.05);
+        }
+        .hud {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            right: 15px;
+            display: none;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: none;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .phase-badge {
+            font-size: 13px;
+            padding: 4px 10px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.1);
+        }
+        .godmode-badge {
+            font-size: 12px;
+            color: #FFEA00;
+            background: rgba(255, 234, 0, 0.2);
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-left: 8px;
+            display: none;
+        }
+
+        /* 🔊 볼륨 컨트롤러 스타일 */
+        .volume-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 14px;
+            background: rgba(255, 255, 255, 0.06);
+            padding: 8px 18px;
+            border-radius: 20px;
+            font-size: 14px;
+            color: #ccc;
+        }
+        .volume-container input[type="range"] {
+            cursor: pointer;
+            accent-color: #00E676;
+        }
+    </style>
+</head>
+<body>
+    <!-- 배경 음악 오디오 태그 -->
+    <audio id="bgmAudio" src="/static/bgm.mp3" loop preload="auto"></audio>
+
+    <h1>무빙의 고수</h1>
+    <p class="info">조작: 숫자패드 옆 화살표 방향키 (↑, ↓, ←, →) | <b>[G] 키: 무적 모드 ON/OFF</b></p>
+
+    <div class="canvas-container">
+        <canvas id="gameCanvas" width="500" height="500"></canvas>
+        
+        <div id="hud" class="hud">
+            <div>
+                <span id="timeText">버틴 시간: 0.00초</span>
+                <span id="godBadge" class="godmode-badge">🛡️ 무적 ON</span>
+            </div>
+            <span id="phaseText" class="phase-badge">Phase 1</span>
+        </div>
+
+        <div id="uiOverlay" class="overlay">
+            <h2 id="uiTitle">무빙의 고수</h2>
+            <p id="uiDesc">최대한 오래 살아남아 최고 기록을 세워보세요!<br><span style="font-size:13px; color:#FFEA00;">(테스트용: 게임 중 [G]를 누르면 무적)</span></p>
+            <button id="startBtn" class="btn">게임 시작</button>
+        </div>
+    </div>
+
+    <!-- 🔊 볼륨 조절 슬라이더 바 -->
+    <div class="volume-container">
+        <span id="volumeIcon">🔊</span>
+        <span>BGM 볼륨:</span>
+        <input type="range" id="volumeSlider" min="0" max="100" value="30">
+        <span id="volumeValue">30%</span>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        const uiOverlay = document.getElementById("uiOverlay");
+        const uiTitle = document.getElementById("uiTitle");
+        const uiDesc = document.getElementById("uiDesc");
+        const startBtn = document.getElementById("startBtn");
+        const hud = document.getElementById("hud");
+        const timeText = document.getElementById("timeText");
+        const phaseText = document.getElementById("phaseText");
+        const godBadge = document.getElementById("godBadge");
+        const bgmAudio = document.getElementById("bgmAudio");
+
+        // 볼륨 요소
+        const volumeSlider = document.getElementById("volumeSlider");
+        const volumeValue = document.getElementById("volumeValue");
+        const volumeIcon = document.getElementById("volumeIcon");
+
+        // 기본 볼륨: 30%
+        bgmAudio.volume = 0.3;
+
+        // 볼륨 슬라이더 조절 이벤트
+        volumeSlider.addEventListener("input", (e) => {
+            const val = e.target.value;
+            bgmAudio.volume = val / 100;
+            volumeValue.innerText = `${val}%`;
+
+            if (val == 0) {
+                volumeIcon.innerText = "🔇";
+            } else if (val < 50) {
+                volumeIcon.innerText = "🔉";
+            } else {
+                volumeIcon.innerText = "🔊";
+            }
+        });
+
+        let gameState = 'ready';
+        let isInvincible = false;
+
+        const player = {
+            x: 244,
+            y: 244,
+            size: 12,
+            speed: 4.2
+        };
+
+        let bullets = [];
+        let trains = [];
+        let trainWarnings = [];
+        let startTime = 0;
+        let survivedTime = 0;
+        let bulletSpawnTimer = 0;
+        let trainSpawnTimer = 0;
+        let warningIdCounter = 0;
+
+        const shrinkMargin = 50;
+        let shrinkWarning = false;
+        let isArenaShrunk = false;
+
+        const keys = {};
+        window.addEventListener("keydown", (e) => {
+            if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) {
+                e.preventDefault();
+            }
+            keys[e.code] = true;
+
+            if (e.code === "KeyG") {
+                isInvincible = !isInvincible;
+                godBadge.style.display = isInvincible ? "inline-block" : "none";
+            }
+        });
+
+        window.addEventListener("keyup", (e) => {
+            keys[e.code] = false;
+        });
+
+        function startGame() {
+            gameState = 'playing';
+            uiOverlay.style.display = 'none';
+            hud.style.display = 'flex';
+
+            bgmAudio.currentTime = 0;
+            bgmAudio.play().catch(err => console.log("자동재생 대기:", err));
+
+            player.x = canvas.width / 2 - player.size / 2;
+            player.y = canvas.height / 2 - player.size / 2;
+
+            bullets = [];
+            trains = [];
+            trainWarnings = [];
+            warningIdCounter = 0;
+            startTime = performance.now();
+            survivedTime = 0;
+            bulletSpawnTimer = 0;
+            trainSpawnTimer = 0;
+
+            shrinkWarning = false;
+            isArenaShrunk = false;
+        }
+
+        function gameOver() {
+            gameState = 'gameover';
+            uiOverlay.style.display = 'flex';
+            uiTitle.innerText = "GAME OVER";
+            uiTitle.style.color = "#FF5252";
+            uiDesc.innerHTML = `기록: <b>${survivedTime.toFixed(2)}초</b> 생존!<br>다시 도전해보세요.`;
+            startBtn.innerText = "다시 시작";
+
+            bgmAudio.pause();
+        }
+
+        function getArenaBounds() {
+            if (isArenaShrunk) {
+                return {
+                    left: shrinkMargin,
+                    top: shrinkMargin,
+                    right: canvas.width - shrinkMargin,
+                    bottom: canvas.height - shrinkMargin
+                };
+            }
+            return {
+                left: 0,
+                top: 0,
+                right: canvas.width,
+                bottom: canvas.height
+            };
+        }
+
+        function spawnBullet() {
+            const side = Math.floor(Math.random() * 4);
+            let x, y;
+            const size = 10;
+
+            if (side === 0) { x = Math.random() * (canvas.width - size); y = -size - 2; }
+            else if (side === 1) { x = Math.random() * (canvas.width - size); y = canvas.height + 2; }
+            else if (side === 2) { x = -size - 2; y = Math.random() * (canvas.height - size); }
+            else { x = canvas.width + 2; y = Math.random() * (canvas.height - size); }
+
+            const targetX = player.x + (Math.random() * 40 - 20);
+            const targetY = player.y + (Math.random() * 40 - 20);
+            const angle = Math.atan2(targetY - y, targetX - x);
+
+            let bounceChance = 0;
+            if (survivedTime >= 75) {
+                bounceChance = 0.40;
+            } else if (survivedTime >= 45) {
+                bounceChance = 0.25;
+            }
+            const isBouncing = (Math.random() < bounceChance);
+            const canStop = (survivedTime >= 140) && !isBouncing && (Math.random() < 0.3);
+
+            const initialSpeed = 1.7;
+            let baseSpeed = initialSpeed;
+
+            if (survivedTime >= 60 && survivedTime < 90) {
+                baseSpeed = 2.2;
+            } else if (survivedTime >= 90 && survivedTime < 120) {
+                baseSpeed = 2.6;
+            } else if (survivedTime >= 120) {
+                const extraTime = survivedTime - 120;
+                baseSpeed = Math.min(2.6 + extraTime * 0.03, initialSpeed * 2.0);
+            }
+
+            const speed = baseSpeed + Math.random() * 0.3;
+
+            bullets.push({
+                x: x,
+                y: y,
+                size: size,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                isBounceType: isBouncing,
+                bouncesLeft: isBouncing ? 1 : 0,
+                hasEntered: false,
+                canStop: canStop,
+                stopDelay: Math.floor(25 + Math.random() * 20),
+                stopDuration: 42,
+                isStopped: false,
+                stoppedDone: false
+            });
+        }
+
+        function scheduleTrain() {
+            const isHorizontal = Math.random() < 0.5;
+            const trainThickness = 50;
+            const warningId = ++warningIdCounter;
+            const bounds = getArenaBounds();
+
+            if (isHorizontal) {
+                const minY = bounds.top;
+                const maxY = bounds.bottom - trainThickness;
+                const y = minY + Math.random() * Math.max(10, maxY - minY);
+                const fromLeft = Math.random() < 0.5;
+
+                trainWarnings.push({
+                    id: warningId,
+                    x: 0,
+                    y: y,
+                    width: canvas.width,
+                    height: trainThickness
+                });
+
+                setTimeout(() => {
+                    trainWarnings = trainWarnings.filter(w => w.id !== warningId);
+                    if (gameState !== 'playing') return;
+                    trains.push({
+                        x: fromLeft ? -400 : canvas.width,
+                        y: y,
+                        width: 350,
+                        height: trainThickness,
+                        vx: fromLeft ? 14 : -14,
+                        vy: 0
+                    });
+                }, 1500);
+
+            } else {
+                const minX = bounds.left;
+                const maxX = bounds.right - trainThickness;
+                const x = minX + Math.random() * Math.max(10, maxX - minX);
+                const fromTop = Math.random() < 0.5;
+
+                trainWarnings.push({
+                    id: warningId,
+                    x: x,
+                    y: 0,
+                    width: trainThickness,
+                    height: canvas.height
+                });
+
+                setTimeout(() => {
+                    trainWarnings = trainWarnings.filter(w => w.id !== warningId);
+                    if (gameState !== 'playing') return;
+                    trains.push({
+                        x: x,
+                        y: fromTop ? -400 : canvas.height,
+                        width: trainThickness,
+                        height: 350,
+                        vx: 0,
+                        vy: fromTop ? 14 : -14
+                    });
+                }, 1500);
+            }
+        }
+
+        function update() {
+            if (gameState !== 'playing') return;
+
+            const now = performance.now();
+            survivedTime = (now - startTime) / 1000;
+            timeText.innerText = `버틴 시간: ${survivedTime.toFixed(2)}초`;
+
+            if (survivedTime < 15) {
+                phaseText.innerText = "Phase 1";
+                phaseText.style.color = "#00E676";
+            } else if (survivedTime < 30) {
+                phaseText.innerText = "Phase 2: ⚠️ 기차";
+                phaseText.style.color = "#FF9100";
+            } else if (survivedTime < 45) {
+                phaseText.innerText = "Phase 3: ⚠️ 다중 기차";
+                phaseText.style.color = "#FF3D00";
+            } else if (survivedTime < 60) {
+                phaseText.innerText = "Phase 4: 🌀 도탄탄";
+                phaseText.style.color = "#00B0FF";
+            } else if (survivedTime < 75) {
+                phaseText.innerText = "Phase 5: ⚡ 1차 가속";
+                phaseText.style.color = "#FFEA00";
+            } else if (survivedTime < 90) {
+                phaseText.innerText = "Phase 6: ⛔ 영역 축소 (도탄 40%)";
+                phaseText.style.color = "#FF1744";
+            } else if (survivedTime < 105) {
+                phaseText.innerText = "Phase 7: 🔥 2차 가속";
+                phaseText.style.color = "#D500F9";
+            } else if (survivedTime < 120) {
+                phaseText.innerText = "Phase 8: 🌊 탄량 증가";
+                phaseText.style.color = "#651FFF";
+            } else if (survivedTime < 140) {
+                phaseText.innerText = "Phase 9: ☠️ 한계 가속(2.0x)";
+                phaseText.style.color = "#FF0055";
+            } else {
+                phaseText.innerText = "Phase FINAL: ⏳ 시공 정지 탄환";
+                phaseText.style.color = "#FFD700";
+            }
+
+            if (survivedTime >= 75 && !isArenaShrunk) {
+                shrinkWarning = true;
+                if (survivedTime >= 77) {
+                    isArenaShrunk = true;
+                    shrinkWarning = false;
+                }
+            }
+
+            const bounds = getArenaBounds();
+
+            if (keys["ArrowUp"] && player.y > bounds.top) player.y -= player.speed;
+            if (keys["ArrowDown"] && player.y < bounds.bottom - player.size) player.y += player.speed;
+            if (keys["ArrowLeft"] && player.x > bounds.left) player.x -= player.speed;
+            if (keys["ArrowRight"] && player.x < bounds.right - player.size) player.x += player.speed;
+
+            if (isArenaShrunk) {
+                if (player.x < bounds.left) player.x = bounds.left;
+                if (player.x > bounds.right - player.size) player.x = bounds.right - player.size;
+                if (player.y < bounds.top) player.y = bounds.top;
+                if (player.y > bounds.bottom - player.size) player.y = bounds.bottom - player.size;
+            }
+
+            bulletSpawnTimer++;
+            let spawnInterval = 36;
+            if (survivedTime >= 105) {
+                const overTime = survivedTime - 105;
+                spawnInterval = Math.max(22, 36 - Math.floor(overTime * 0.35));
+            }
+            if (bulletSpawnTimer >= spawnInterval) {
+                spawnBullet();
+                bulletSpawnTimer = 0;
+            }
+
+            if (survivedTime >= 15) {
+                trainSpawnTimer++;
+                let trainInterval = 150;
+                if (survivedTime >= 75) {
+                    trainInterval = 330;
+                } else if (survivedTime < 30) {
+                    trainInterval = 220;
+                }
+
+                if (trainSpawnTimer >= trainInterval) {
+                    scheduleTrain();
+                    if (survivedTime >= 30 && survivedTime < 75) {
+                        setTimeout(() => { 
+                            if (gameState === 'playing') scheduleTrain(); 
+                        }, 500);
+                    }
+                    trainSpawnTimer = 0;
+                }
+            }
+
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+
+                if (b.canStop && !b.stoppedDone) {
+                    if (b.hasEntered) {
+                        if (b.stopDelay > 0) {
+                            b.stopDelay--;
+                        } else if (b.stopDuration > 0) {
+                            b.isStopped = true;
+                            b.stopDuration--;
+                        } else {
+                            b.isStopped = false;
+                            b.stoppedDone = true;
+                        }
+                    }
+                }
+
+                if (!b.isStopped) {
+                    b.x += b.vx;
+                    b.y += b.vy;
+                }
+
+                if (!b.hasEntered) {
+                    if (b.x >= bounds.left && b.x + b.size <= bounds.right && b.y >= bounds.top && b.y + b.size <= bounds.bottom) {
+                        b.hasEntered = true;
+                    }
+                }
+
+                if (b.isBounceType && b.hasEntered && b.bouncesLeft > 0) {
+                    if (b.x <= bounds.left) {
+                        b.x = bounds.left;
+                        b.vx = Math.abs(b.vx);
+                        b.bouncesLeft--;
+                    } else if (b.x + b.size >= bounds.right) {
+                        b.x = bounds.right - b.size;
+                        b.vx = -Math.abs(b.vx);
+                        b.bouncesLeft--;
+                    }
+
+                    if (b.y <= bounds.top) {
+                        b.y = bounds.top;
+                        b.vy = Math.abs(b.vy);
+                        b.bouncesLeft--;
+                    } else if (b.y + b.size >= bounds.bottom) {
+                        b.y = bounds.bottom - b.size;
+                        b.vy = -Math.abs(b.vy);
+                        b.bouncesLeft--;
+                    }
+                }
+
+                if (!isInvincible) {
+                    if (
+                        player.x < b.x + b.size &&
+                        player.x + player.size > b.x &&
+                        player.y < b.y + b.size &&
+                        player.y + player.size > b.y
+                    ) {
+                        gameOver();
+                        return;
+                    }
+                }
+
+                if (b.x < -80 || b.x > canvas.width + 80 || b.y < -80 || b.y > canvas.height + 80) {
+                    bullets.splice(i, 1);
+                }
+            }
+
+            for (let i = trains.length - 1; i >= 0; i--) {
+                const t = trains[i];
+                t.x += t.vx;
+                t.y += t.vy;
+
+                if (!isInvincible) {
+                    if (
+                        player.x < t.x + t.width &&
+                        player.x + player.size > t.x &&
+                        player.y < t.y + t.height &&
+                        player.y + player.size > t.y
+                    ) {
+                        gameOver();
+                        return;
+                    }
+                }
+
+                if (t.x < -500 || t.x > canvas.width + 500 || t.y < -500 || t.y > canvas.height + 500) {
+                    trains.splice(i, 1);
+                }
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (shrinkWarning) {
+                ctx.strokeStyle = "#FF1744";
+                ctx.lineWidth = 3;
+                ctx.setLineDash([10, 8]);
+                ctx.strokeRect(shrinkMargin, shrinkMargin, canvas.width - shrinkMargin * 2, canvas.height - shrinkMargin * 2);
+                ctx.setLineDash([]);
+            } else if (isArenaShrunk) {
+                ctx.fillStyle = "rgba(255, 23, 68, 0.15)";
+                ctx.fillRect(0, 0, canvas.width, shrinkMargin);
+                ctx.fillRect(0, canvas.height - shrinkMargin, canvas.width, shrinkMargin);
+                ctx.fillRect(0, shrinkMargin, shrinkMargin, canvas.height - shrinkMargin * 2);
+                ctx.fillRect(canvas.width - shrinkMargin, shrinkMargin, shrinkMargin, canvas.height - shrinkMargin * 2);
+
+                ctx.strokeStyle = "#FF1744";
+                ctx.lineWidth = 2;
+                ctx.strokeRect(shrinkMargin, shrinkMargin, canvas.width - shrinkMargin * 2, canvas.height - shrinkMargin * 2);
+            }
+
+            trainWarnings.forEach(w => {
+                ctx.fillStyle = "rgba(255, 23, 68, 0.25)";
+                ctx.fillRect(w.x, w.y, w.width, w.height);
+
+                ctx.strokeStyle = "rgba(255, 23, 68, 0.85)";
+                ctx.lineWidth = 2;
+                ctx.setLineDash([8, 6]);
+                ctx.strokeRect(w.x, w.y, w.width, w.height);
+                ctx.setLineDash([]);
+            });
+
+            trains.forEach(t => {
+                ctx.fillStyle = "#D50000";
+                ctx.fillRect(t.x, t.y, t.width, t.height);
+
+                ctx.fillStyle = "#FFEA00";
+                if (t.vx > 0) ctx.fillRect(t.x + t.width - 15, t.y + 10, 10, t.height - 20);
+                else if (t.vx < 0) ctx.fillRect(t.x + 5, t.y + 10, 10, t.height - 20);
+                else if (t.vy > 0) ctx.fillRect(t.x + 10, t.y + t.height - 15, t.width - 20, 10);
+                else if (t.vy < 0) ctx.fillRect(t.x + 10, t.y + 5, t.width - 20, 10);
+            });
+
+            bullets.forEach(b => {
+                if (b.isStopped) {
+                    ctx.fillStyle = (Math.floor(Date.now() / 100) % 2 === 0) ? "#FFEA00" : "#FFFFFF";
+                } else if (b.isBounceType) {
+                    ctx.fillStyle = "#00B0FF";
+                } else {
+                    ctx.fillStyle = "#FF7043";
+                }
+
+                ctx.beginPath();
+                ctx.arc(b.x + b.size / 2, b.y + b.size / 2, b.size / 2, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            if (isInvincible) {
+                ctx.fillStyle = (Math.floor(Date.now() / 150) % 2 === 0) ? "#FFEA00" : "rgba(255, 234, 0, 0.4)";
+            } else {
+                ctx.fillStyle = "#00E676";
+            }
+            ctx.fillRect(player.x, player.y, player.size, player.size);
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        startBtn.addEventListener("click", startGame);
+        gameLoop();
+    </script>
+</body>
+</html>
