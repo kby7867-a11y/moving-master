@@ -2,7 +2,19 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>무빙의 고수</title>
+    <title>무빙의 고수 - 탄막 피하기 웹게임</title>
+    
+    <!-- 검색 엔진 최적화(SEO) 태그 -->
+    <meta name="description" content="쏟아지는 탄막과 기차를 피하는 회피 액션 웹게임 '무빙의 고수'! 브라우저에서 바로 즐겨보세요.">
+    <meta name="keywords" content="무빙의 고수, 닷지게임, 피하기게임, 웹게임, 플래시게임, 탄막피하기">
+    <meta name="robots" content="index, follow">
+
+    <!-- 카카오톡/SNS 공유용 미리보기 태그 -->
+    <meta property="og:title" content="무빙의 고수 - 회피 액션 웹게임">
+    <meta property="og:description" content="쏟아지는 탄막과 기차를 피해 최대한 오래 살아남으세요!">
+    <meta property="og:type" content="website">
+    <meta name="google-site-verification" content="TqriOs1LCQlkseH0wJ4ATXc63Be2FgKrRvnm4sk3iCg" />
+
     <style>
         body {
             margin: 0;
@@ -639,31 +651,35 @@
             ctx.fillRect(player.x, player.y, player.size, player.size);
         }
 
-        function gameLoop() {
-            update();
+        // --- 고주사율(120Hz, 144Hz 등) 모니터 프레임 동기화 패치 ---
+        const TARGET_FPS = 60;
+        const STEP_TIME = 1000 / TARGET_FPS; // 약 16.67ms 고정 타임스텝
+        let lastFrameTime = performance.now();
+        let accumulator = 0;
+
+        function gameLoop(currentTime) {
+            if (!currentTime) currentTime = performance.now();
+            
+            let deltaTime = currentTime - lastFrameTime;
+            lastFrameTime = currentTime;
+
+            // 창 전환 시 발생하는 렉 스파이크 방지
+            if (deltaTime > 100) deltaTime = 100;
+
+            accumulator += deltaTime;
+
+            // 사용자 모니터 주사율에 상관없이 정확히 초당 60회 속도로 연산 진행
+            while (accumulator >= STEP_TIME) {
+                update();
+                accumulator -= STEP_TIME;
+            }
+
             draw();
             requestAnimationFrame(gameLoop);
         }
 
         startBtn.addEventListener("click", startGame);
-        gameLoop();
+        requestAnimationFrame(gameLoop);
     </script>
-<head>
-    <meta name="google-site-verification" content="TqriOs1LCQlkseH0wJ4ATXc63Be2FgKrRvnm4sk3iCg" />
-    <meta charset="UTF-8">
-    <title>무빙의 고수 - 탄막 피하기 웹게임</title>
-    
-    <!-- 검색 엔진 최적화(SEO) 태그 -->
-    <meta name="description" content="쏟아지는 탄막과 기차를 피하는 회피 액션 웹게임 '무빙의 고수'! 브라우저에서 바로 즐겨보세요.">
-    <meta name="keywords" content="무빙의 고수, 닷지게임, 피하기게임, 웹게임, 플래시게임, 탄막피하기">
-    <meta name="robots" content="index, follow">
-
-    <!-- 카카오톡/SNS 공유용 미리보기 태그 -->
-    <meta property="og:title" content="무빙의 고수 - 회피 액션 웹게임">
-    <meta property="og:description" content="쏟아지는 탄막과 기차를 피해 최대한 오래 살아남으세요!">
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="https://yourdomain.com/">
-    ... (기존 style 코드)
 </body>
 </html>
-    
